@@ -21,6 +21,12 @@ export interface CallHistoryEntry {
   createdAt: string;
   resolvedAt?: string;
   note?: string;
+  chain?: 'base' | 'stellar';
+  txHash?: string;
+  fee?: number;
+  fiatValue?: number;
+  fiatCurrency?: string;
+  gainLoss?: number;
 }
 
 export interface TimelinePoint {
@@ -146,6 +152,19 @@ export const EXPORT_COLUMNS = [
   'note',
 ] as const;
 
+export const TAX_LEDGER_COLUMNS = [
+  'timestamp',
+  'asset',
+  'chain',
+  'transaction_type',
+  'amount',
+  'fee',
+  'fiat_value',
+  'fiat_currency',
+  'gain_loss',
+  'transaction_hash',
+] as const;
+
 /**
  * RFC 4180 quoting.
  *
@@ -172,15 +191,37 @@ export function toJson(entries: CallHistoryEntry[]): string {
   return JSON.stringify(entries, null, 2);
 }
 
-export type ExportFormat = 'csv' | 'json';
+export function toTaxCsv(entries: CallHistoryEntry[]): string {
+  const rows = entries.map((entry) =>
+    [
+      effectiveDate(entry),
+      entry.token,
+      entry.chain ?? '',
+      entry.outcome === 'open' ? 'stake' : entry.outcome === 'won' ? 'payout' : 'loss',
+      entry.stake,
+      entry.fee ?? '',
+      entry.fiatValue ?? '',
+      entry.fiatCurrency ?? 'USD',
+      entry.gainLoss ?? entry.pnl,
+      entry.txHash ?? '',
+    ].map(escapeCsvField).join(','),
+  );
+
+  return [TAX_LEDGER_COLUMNS.join(','), ...rows].join('\n');
+}
+
+export type ExportFormat = 'csv' | 'json' | 'tax-csv';
 
 export const MIME_TYPES: Record<ExportFormat, string> = {
   csv: 'text/csv;charset=utf-8',
   json: 'application/json',
+  'tax-csv': 'text/csv;charset=utf-8',
 };
 
 export function serializeHistory(entries: CallHistoryEntry[], format: ExportFormat): string {
-  return format === 'csv' ? toCsv(entries) : toJson(entries);
+  if (format === 'csv') return toCsv(entries);
+  if (format === 'tax-csv') return toTaxCsv(entries);
+  return toJson(entries);
 }
 
 /** `backitonchain-history-0xabc1234-2026-08-21.csv` */

@@ -6,8 +6,8 @@
  *     revalidating) so the feed renders from the last good snapshot when the
  *     network is down and only refills when a request actually succeeds.
  */
-const SHELL_CACHE = 'backit-shell-v1';
-const FEED_CACHE = 'backit-feed-v1';
+const SHELL_CACHE = 'backit-shell-v2';
+const FEED_CACHE = 'backit-feed-v2';
 
 const SHELL_URLS = ['/', '/manifest.json'];
 
@@ -80,4 +80,41 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin) {
     event.respondWith(cacheFirst(request));
   }
+});
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+
+  const title = data.title || 'Back It';
+  const options = {
+    body: data.body || 'A call you follow needs your attention.',
+    icon: data.icon || '/icons/icon-192.png',
+    badge: data.badge || '/icons/icon-192.png',
+    tag: data.tag || data.callId || 'backit-notification',
+    renotify: true,
+    data: { url: data.url || (data.callId ? `/calls/${data.callId}` : '/') },
+    actions: data.callId ? [{ action: 'open-call', title: 'Open call' }] : [],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => 'focus' in client);
+      if (existing) {
+        existing.navigate(target);
+        return existing.focus();
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
 });

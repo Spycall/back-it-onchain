@@ -20,6 +20,8 @@ const QUEUE_KEY = 'offline-draft-queue';
 
 const SW_PATH = '/sw.js';
 
+export type PushPermissionState = NotificationPermission | 'unsupported';
+
 export function isServiceWorkerSupported(): boolean {
   return typeof window !== 'undefined' && 'serviceWorker' in window.navigator;
 }
@@ -40,6 +42,33 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     }
     return null;
   }
+}
+
+export function pushPermissionState(): PushPermissionState {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  return window.Notification.permission;
+}
+
+export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubscription | null> {
+  if (!isServiceWorkerSupported() || !('PushManager' in window)) return null;
+  const permission = await window.Notification.requestPermission();
+  if (permission !== 'granted') return null;
+
+  const registration = await registerServiceWorker();
+  if (!registration) return null;
+
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) return existing;
+
+  const key = Uint8Array.from(atob(vapidPublicKey.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0));
+  return registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+}
+
+export async function unsubscribeFromPush(): Promise<boolean> {
+  if (!isServiceWorkerSupported()) return false;
+  const registration = await window.navigator.serviceWorker.getRegistration(SW_PATH);
+  const subscription = await registration?.pushManager.getSubscription();
+  return subscription ? subscription.unsubscribe() : false;
 }
 
 export function readDraftQueue(): QueuedDraft[] {
