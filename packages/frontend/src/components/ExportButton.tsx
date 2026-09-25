@@ -36,7 +36,7 @@ export function defaultDownload(filename: string, content: string, mimeType: str
   URL.revokeObjectURL(url);
 }
 
-const FORMATS: ExportFormat[] = ['csv', 'json'];
+const FORMATS: ExportFormat[] = ['csv', 'tax-csv', 'json'];
 
 /** CSV/JSON download trigger for a wallet's call history (FE-07). */
 export function ExportButton({
@@ -104,7 +104,11 @@ export function ExportButton({
               onClick={() => handleExport(format)}
               className="block w-full px-3 py-2 text-left text-sm hover:bg-secondary disabled:opacity-50"
             >
-              {busy === format ? 'Preparing…' : `Download ${format.toUpperCase()}`}
+              {busy === format
+                ? 'Preparing…'
+                : format === 'tax-csv'
+                  ? 'Download Tax CSV'
+                  : `Download ${format.toUpperCase()}`}
             </button>
           ))}
 

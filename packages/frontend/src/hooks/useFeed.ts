@@ -81,7 +81,7 @@ export function useFeed(tab: FeedTab, options: UseFeedOptions = {}): UseFeedResu
 
   // Personalization (FE-30): muted authors/tokens, chain filters and ranking
   // weights are applied client-side to whatever the API returned.
-  const { prefs } = useFeedPrefs();
+  const { prefs, filters } = useFeedPrefs();
 
   // Flattened once per data change rather than on every render, since the
   // list feeds a memoised virtualiser downstream.
@@ -91,8 +91,8 @@ export function useFeed(tab: FeedTab, options: UseFeedOptions = {}): UseFeedResu
   );
 
   const calls = React.useMemo(
-    () => applyFeedPrefs(flattened, prefs),
-    [flattened, prefs],
+    () => applyDiscoveryFilters(applyFeedPrefs(flattened, prefs), filters),
+    [flattened, filters, prefs],
   );
 
   return {

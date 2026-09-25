@@ -7,6 +7,13 @@
 
 import * as React from 'react';
 import type { Call } from '../../lib/types';
+import {
+  applyDiscoveryFilters,
+  DEFAULT_DISCOVERY_FILTERS,
+  parseDiscoveryFilters,
+  serializeDiscoveryFilters,
+  type DiscoveryFilters,
+} from '../lib/discovery-filters';
 
 export const PREF_KEY = 'feed-personalization';
 
@@ -29,6 +36,9 @@ export interface UseFeedPrefsResult {
   prefs: FeedPrefs;
   setPrefs: FeedPrefsSetter;
   resetPrefs: () => void;
+  filters: DiscoveryFilters;
+  setFilters: (update: Partial<DiscoveryFilters>) => void;
+  resetFilters: () => void;
 }
 
 export function loadFeedPrefs(): FeedPrefs {
@@ -151,6 +161,11 @@ export function applyFeedPrefs(calls: Call[], prefs: FeedPrefs): Call[] {
 
 export function useFeedPrefs(): UseFeedPrefsResult {
   const [prefs, setPrefsState] = React.useState<FeedPrefs>(loadFeedPrefs);
+  const [filters, setFiltersState] = React.useState<DiscoveryFilters>(() =>
+    typeof window === 'undefined'
+      ? DEFAULT_DISCOVERY_FILTERS
+      : parseDiscoveryFilters(new URLSearchParams(window.location.search)),
+  );
 
   const setPrefs = React.useCallback((update: Partial<FeedPrefs>) => {
     setPrefsState((prev) => {
@@ -165,5 +180,27 @@ export function useFeedPrefs(): UseFeedPrefsResult {
     saveFeedPrefs(DEFAULT_PREFS);
   }, []);
 
-  return { prefs, setPrefs, resetPrefs };
+  const setFilters = React.useCallback((update: Partial<DiscoveryFilters>) => {
+    setFiltersState((previous) => {
+      const next = { ...previous, ...update };
+      const params = serializeDiscoveryFilters(next);
+      const query = params.toString();
+      const url = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
+      window.history.replaceState(window.history.state, '', url);
+      return next;
+    });
+  }, []);
+
+  const resetFilters = React.useCallback(() => setFilters(DEFAULT_DISCOVERY_FILTERS), [setFilters]);
+
+  return {
+    prefs,
+    setPrefs,
+    resetPrefs,
+    filters,
+    setFilters,
+    resetFilters,
+  };
 }
+
+export { applyDiscoveryFilters };

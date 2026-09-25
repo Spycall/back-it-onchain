@@ -3,14 +3,16 @@
 import * as React from 'react';
 import { useFeedPrefs, type FeedPrefs } from '@/src/hooks/useFeedPrefs';
 import { cn } from '@/lib/utils';
+import type { DiscoveryFilters } from '@/src/lib/discovery-filters';
 
 /**
  * Feed personalization panel (FE-30): mute authors, filter chains, and tune
  * ranking weights.
  */
 export function FeedPersonalize() {
-  const { prefs, setPrefs, resetPrefs } = useFeedPrefs();
+  const { prefs, setPrefs, resetPrefs, filters, setFilters, resetFilters } = useFeedPrefs();
   const [muteInput, setMuteInput] = React.useState('');
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   const toggleChain = (chain: FeedPrefs['chains'][number]) => {
     const hasAll = prefs.chains.includes('all');
@@ -42,6 +44,18 @@ export function FeedPersonalize() {
     setPrefs({ mutedAuthors: prefs.mutedAuthors.filter((m) => m !== author) });
   };
 
+  const updateFilter = <K extends keyof DiscoveryFilters>(key: K, value: DiscoveryFilters[K]) => {
+    setFilters({ [key]: value });
+  };
+
+  const activeFilters = [
+    filters.volume !== null ? `Volume >= ${filters.volume}` : null,
+    filters.expiry !== 'any' ? `Expires < ${filters.expiry}` : null,
+    filters.surge !== 'any' ? `Surge: ${filters.surge}` : null,
+    filters.chain !== 'all' ? `Chain: ${filters.chain}` : null,
+    filters.category ? `Category: ${filters.category}` : null,
+  ].filter((value): value is string => Boolean(value));
+
   return (
     <div
       className="flex flex-col gap-4 rounded-lg border border-border bg-card/50 p-4"
@@ -49,15 +63,82 @@ export function FeedPersonalize() {
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Feed settings</h3>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={resetFilters} className="text-xs text-muted-foreground hover:text-foreground">
+            Reset filters
+          </button>
+          <button type="button" onClick={resetPrefs} className="text-xs text-muted-foreground hover:text-foreground" data-testid="personalize-reset">
+            Reset settings
+          </button>
+        </div>
+      </div>
+
+      <section aria-label="Discovery filters" className="border-b border-border pb-4">
         <button
           type="button"
-          onClick={resetPrefs}
-          className="text-xs text-muted-foreground hover:text-foreground"
-          data-testid="personalize-reset"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-expanded={filtersOpen}
+          className="flex w-full items-center justify-between text-left text-sm font-semibold"
+          data-testid="discovery-filter-toggle"
         >
-          Reset
+          <span>Discovery filters{activeFilters.length ? ` (${activeFilters.length})` : ''}</span>
+          <span aria-hidden="true">{filtersOpen ? '−' : '+'}</span>
         </button>
-      </div>
+
+        {activeFilters.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5" data-testid="active-filter-chips">
+            {activeFilters.map((filter) => (
+              <span key={filter} className="rounded-full bg-primary/15 px-2.5 py-1 text-xs text-primary">
+                {filter}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {filtersOpen ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-muted-foreground">
+              Minimum staking volume
+              <input
+                type="number"
+                min="0"
+                value={filters.volume ?? ''}
+                onChange={(event) => updateFilter('volume', event.target.value ? Number(event.target.value) : null)}
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                placeholder="Any volume"
+              />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Expiry horizon
+              <select value={filters.expiry} onChange={(event) => updateFilter('expiry', event.target.value as DiscoveryFilters['expiry'])} className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                <option value="any">Any time</option>
+                <option value="24h">Within 24 hours</option>
+                <option value="7d">Within 7 days</option>
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Surge fee
+              <select value={filters.surge} onChange={(event) => updateFilter('surge', event.target.value as DiscoveryFilters['surge'])} className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                <option value="any">Any tier</option>
+                <option value="standard">Standard</option>
+                <option value="elevated">Elevated</option>
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Chain
+              <select value={filters.chain} onChange={(event) => updateFilter('chain', event.target.value as DiscoveryFilters['chain'])} className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground">
+                <option value="all">All chains</option>
+                <option value="base">Base</option>
+                <option value="stellar">Stellar</option>
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground sm:col-span-2">
+              Category or asset
+              <input value={filters.category} onChange={(event) => updateFilter('category', event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground" placeholder="Search category, title, or asset" />
+            </label>
+          </div>
+        ) : null}
+      </section>
 
       <fieldset>
         <legend className="mb-2 text-xs font-medium text-muted-foreground">Chains</legend>

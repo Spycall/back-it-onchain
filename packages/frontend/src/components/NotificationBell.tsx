@@ -6,9 +6,13 @@ import {
   type AppNotification,
   type UseNotificationsOptions,
 } from '../hooks/useNotificationsSocket';
+import { pushPermissionState, subscribeToPush, unsubscribeFromPush } from '../lib/pwa';
 
 export interface NotificationBellProps extends UseNotificationsOptions {
   userId?: string;
+  vapidPublicKey?: string;
+  registerPushSubscription?: (userId: string, subscription: PushSubscriptionJSON) => Promise<void>;
+  removePushSubscription?: (userId: string, endpoint: string) => Promise<void>;
   /** Cap shown on the badge before it becomes "N+". */
   maxBadgeCount?: number;
 }
@@ -73,12 +77,36 @@ export function NotificationRow({
  * 99 and 4,312 unread is not information anyone acts on, and a four-digit
  * badge breaks the layout.
  */
-export function NotificationBell({ userId, maxBadgeCount = 99, ...options }: NotificationBellProps) {
+export function NotificationBell({ userId, vapidPublicKey, registerPushSubscription, removePushSubscription, maxBadgeCount = 99, ...options }: NotificationBellProps) {
   const [open, setOpen] = React.useState(false);
   const { notifications, unreadCount, connected, isLoading, error, markAsRead, markAllAsRead, dismiss } =
     useNotificationsSocket(userId, options);
 
   const now = Date.now();
+  const [pushEnabled, setPushEnabled] = React.useState(false);
+  const [pushBusy, setPushBusy] = React.useState(false);
+
+  const togglePush = async () => {
+    if (!userId || !vapidPublicKey || pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (pushEnabled) {
+        const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription && removePushSubscription) await removePushSubscription(userId, subscription.endpoint);
+        await unsubscribeFromPush();
+        setPushEnabled(false);
+      } else {
+        const subscription = await subscribeToPush(vapidPublicKey);
+        if (subscription && registerPushSubscription) {
+          await registerPushSubscription(userId, subscription.toJSON());
+          setPushEnabled(true);
+        }
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   return (
     <div className="relative" data-testid="notification-bell">
@@ -118,6 +146,11 @@ export function NotificationBell({ userId, maxBadgeCount = 99, ...options }: Not
                 <span data-testid="notification-live" className="text-xs text-green-600">
                   Live
                 </span>
+              ) : null}
+              {vapidPublicKey && pushPermissionState() !== 'denied' ? (
+                <button type="button" onClick={togglePush} disabled={pushBusy || pushPermissionState() === 'unsupported'} className="text-xs underline" data-testid="notification-push-toggle">
+                  {pushBusy ? 'Updating…' : pushEnabled ? 'Disable push' : 'Enable push'}
+                </button>
               ) : null}
               {unreadCount > 0 ? (
                 <button
